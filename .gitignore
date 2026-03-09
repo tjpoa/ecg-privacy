@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Virtual environments
+.env
+.venv
+venv/
+
+# Poetry
+poetry.lock
+
+# OS
+.DS_Store
+
+# Data files
+data/raw/
+data/interim/
+data/processed/
+
+# Models
+outputs/models/
+
+# Logs
+outputs/logs/
+
+# Figures generated
+outputs/figures/
+
+# Tables generated
+outputs/tables/
