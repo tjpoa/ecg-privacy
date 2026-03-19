@@ -4,6 +4,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 SRC_DIR = PROJECT_ROOT / "src"
 NOTEBOOKS_DIR = PROJECT_ROOT / "notebooks"
+OUTPUTS_DIR = PROJECT_ROOT / "outputs"
 
 DATA_DIR = PROJECT_ROOT / "data"
 DATA_RAW = DATA_DIR / "raw"
