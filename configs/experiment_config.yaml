@@ -1,0 +1,91 @@
+protocol_version: jbhi-submission-v1
+
+dataset:
+  source: PhysioNet ECG Arrhythmia Database v1.0.0
+  source_url: https://physionet.org/content/ecg-arrhythmia/1.0.0/
+  source_records: 45152
+  retained_records: 45151
+  sampling_rate_hz: 500
+  duration_seconds: 10
+  leads: 12
+  positive_snomed_codes:
+    - "164889003"
+    - "164890007"
+  retained_class_counts:
+    atrial: 9840
+    non_atrial: 35311
+
+preprocessing:
+  filter: fourth-order Butterworth band-pass
+  lowcut_hz: 0.5
+  highcut_hz: 40.0
+  standardisation: per lead and complete retained record
+  window_seconds: 2.0
+  step_seconds: 1.0
+  segments_per_record: 9
+  total_segments: 406359
+
+evaluation:
+  split_level: retained_record
+  test_fraction: 0.2
+  seeds: [42, 123, 456]
+  reporting: mean and sample standard deviation across seeds
+
+utility:
+  task: atrial versus non-atrial record-derived label
+  model: logistic regression
+  primary_metric: balanced_accuracy
+  shared_balanced_training_segments: 40000
+  record_aggregation: mean of nine segment probabilities
+
+pairwise_linkability:
+  target: same retained ECG record
+  representation: element-wise absolute difference
+  attacker: XGBoost
+  positive_pairs_per_seed: 2000
+  negative_pairs_per_seed: 2000
+  minimum_segment_gap: 4
+  maximum_positive_pairs_per_record: 3
+  primary_metric: roc_auc
+
+operational_gallery:
+  queries_per_seed: 1000
+  candidates_per_query: 1000
+  true_candidates_per_query: 1
+  negative_candidates_per_query: 999
+  positive_prevalence: 0.001
+  metrics: [pr_auc, recall_at_1, mean_reciprocal_rank]
+
+representations:
+  handcrafted_dimensions: 208
+  main_compressed_dimensions: 8
+  sensitivity_dimensions: 64
+  encoder_hidden_units: 128
+  encoder_max_iterations: 25
+  encoder_training_segments: 40000
+  gaussian_operating_points:
+    - clip_norm: 2.0
+      noise_sigma: 0.3875844210084311
+      noise_multiplier: 0.1937922105042155
+    - clip_norm: 4.0
+      noise_sigma: 0.7751688420168622
+      noise_multiplier: 0.1937922105042155
+  privacy_scope: empirical embedding perturbation; not DP-SGD or end-to-end differential privacy
+
+attribute_inference:
+  anchors_per_seed: 1000
+  anchor_segment_reference: 0
+  true_candidate_segment_references: [4, 6, 8]
+  different_record_candidates: 99
+  bootstrap_replicates: 2000
+  targets: [sex, age_at_least_65, continuous_age]
+
+reconstruction:
+  target_records: 12000
+  target_segment_reference: 0
+  target_sampling_rate_hz: 100
+  target_pca_components: 128
+  decoders: [ridge, multilayer_perceptron]
+  ridge_alpha: 1.0
+  multilayer_perceptron_hidden_units: [256, 128]
+  maximum_lag_ms: 250

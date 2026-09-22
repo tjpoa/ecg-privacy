@@ -29,6 +29,23 @@ class FittedFeatureTransform:
     lower_bounds: np.ndarray | None = None
     upper_bounds: np.ndarray | None = None
     projector: GaussianRandomProjection | None = None
+    dp_epsilon: float | None = None
+    dp_delta: float | None = None
+    dp_clip_norm: float | None = None
+    dp_noise_scale: float | None = None
+    dp_mechanism: str | None = None
+
+
+def _clip_rows_by_l2_norm(matrix: np.ndarray, clip_norm: float) -> np.ndarray:
+    norms = np.linalg.norm(matrix, ord=2, axis=1, keepdims=True)
+    scale = np.minimum(1.0, clip_norm / np.maximum(norms, 1e-12))
+    return matrix * scale
+
+
+def _clip_rows_by_l1_norm(matrix: np.ndarray, clip_norm: float) -> np.ndarray:
+    norms = np.linalg.norm(matrix, ord=1, axis=1, keepdims=True)
+    scale = np.minimum(1.0, clip_norm / np.maximum(norms, 1e-12))
+    return matrix * scale
 
 
 def _copy_metadata(df: pd.DataFrame) -> pd.DataFrame:
@@ -138,6 +155,61 @@ def fit_feature_transform(
             random_state=random_state,
         )
 
+    if method == "dp_gaussian_l2":
+        epsilon = float(kwargs.get("epsilon", 10.0))
+        delta = float(kwargs.get("delta", 1e-5))
+        clip_norm = float(kwargs.get("clip_norm", 2.0))
+        random_state = int(kwargs.get("random_state", 42))
+        if epsilon <= 0:
+            raise ValueError("epsilon must be positive for dp_gaussian_l2.")
+        if not 0 < delta < 1:
+            raise ValueError("delta must satisfy 0 < delta < 1 for dp_gaussian_l2.")
+        if clip_norm <= 0:
+            raise ValueError("clip_norm must be positive for dp_gaussian_l2.")
+        scaler = StandardScaler()
+        scaler.fit(train_matrix)
+        sensitivity = 2.0 * clip_norm
+        noise_scale = sensitivity * np.sqrt(2.0 * np.log(1.25 / delta)) / epsilon
+        return FittedFeatureTransform(
+            name=method,
+            feature_columns=feature_columns,
+            output_feature_names=feature_columns,
+            imputer=imputer,
+            scaler=scaler,
+            random_state=random_state,
+            dp_epsilon=epsilon,
+            dp_delta=delta,
+            dp_clip_norm=clip_norm,
+            dp_noise_scale=float(noise_scale),
+            dp_mechanism="gaussian_l2",
+        )
+
+    if method == "dp_laplace_l1":
+        epsilon = float(kwargs.get("epsilon", 10.0))
+        clip_norm = float(kwargs.get("clip_norm", 2.0))
+        random_state = int(kwargs.get("random_state", 42))
+        if epsilon <= 0:
+            raise ValueError("epsilon must be positive for dp_laplace_l1.")
+        if clip_norm <= 0:
+            raise ValueError("clip_norm must be positive for dp_laplace_l1.")
+        scaler = StandardScaler()
+        scaler.fit(train_matrix)
+        sensitivity = 2.0 * clip_norm
+        noise_scale = sensitivity / epsilon
+        return FittedFeatureTransform(
+            name=method,
+            feature_columns=feature_columns,
+            output_feature_names=feature_columns,
+            imputer=imputer,
+            scaler=scaler,
+            random_state=random_state,
+            dp_epsilon=epsilon,
+            dp_delta=0.0,
+            dp_clip_norm=clip_norm,
+            dp_noise_scale=float(noise_scale),
+            dp_mechanism="laplace_l1",
+        )
+
     if method == "pca":
         n_components = kwargs.get("n_components", 50)
         scaler = StandardScaler()
@@ -174,7 +246,8 @@ def fit_feature_transform(
         )
 
     raise ValueError(
-        "method must be one of: identity, standard, robust, minmax, quantization, winsorization, noise, pca, random_projection."
+        "method must be one of: identity, standard, robust, minmax, quantization, winsorization, noise, "
+        "dp_gaussian_l2, dp_laplace_l1, pca, random_projection."
     )
 
 
@@ -203,6 +276,30 @@ def transform_feature_dataframe(df: pd.DataFrame, fitted: FittedFeatureTransform
         offset = 0 if split_name == "train" else 10_000
         rng = np.random.default_rng((fitted.random_state or 42) + offset)
         transformed = transformed + rng.normal(loc=0.0, scale=fitted.noise_std, size=transformed.shape)
+        return _build_output_df(metadata_df, transformed, fitted.output_feature_names)
+
+    if fitted.name == "dp_gaussian_l2":
+        transformed = fitted.scaler.transform(matrix)
+        transformed = _clip_rows_by_l2_norm(transformed, clip_norm=float(fitted.dp_clip_norm))
+        offset = 0 if split_name == "train" else 10_000
+        rng = np.random.default_rng((fitted.random_state or 42) + offset)
+        transformed = transformed + rng.normal(
+            loc=0.0,
+            scale=float(fitted.dp_noise_scale),
+            size=transformed.shape,
+        )
+        return _build_output_df(metadata_df, transformed, fitted.output_feature_names)
+
+    if fitted.name == "dp_laplace_l1":
+        transformed = fitted.scaler.transform(matrix)
+        transformed = _clip_rows_by_l1_norm(transformed, clip_norm=float(fitted.dp_clip_norm))
+        offset = 0 if split_name == "train" else 10_000
+        rng = np.random.default_rng((fitted.random_state or 42) + offset)
+        transformed = transformed + rng.laplace(
+            loc=0.0,
+            scale=float(fitted.dp_noise_scale),
+            size=transformed.shape,
+        )
         return _build_output_df(metadata_df, transformed, fitted.output_feature_names)
 
     if fitted.name == "pca":
