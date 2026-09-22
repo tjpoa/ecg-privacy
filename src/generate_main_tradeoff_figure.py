@@ -15,9 +15,7 @@ except ImportError:  # pragma: no cover - package import fallback
     from .config import OUTPUTS_FIGURES_DIR, OUTPUTS_TABLES_DIR, PROJECT_ROOT
 
 
-MANUSCRIPT_FIGURES_DIR = (
-    PROJECT_ROOT / "manuscript" / "overleaf_jbhi_submission" / "figures"
-)
+PUBLIC_FIGURES_DIR = PROJECT_ROOT / "figures"
 
 
 def _select_row(
@@ -158,8 +156,6 @@ def plot_main_tradeoff(figure_data: pd.DataFrame) -> plt.Figure:
             "axes.labelsize": 8.0,
             "xtick.labelsize": 7.0,
             "ytick.labelsize": 7.0,
-            "pdf.fonttype": 42,
-            "ps.fonttype": 42,
         }
     )
 
@@ -265,16 +261,14 @@ def plot_main_tradeoff(figure_data: pd.DataFrame) -> plt.Figure:
 
 def save_outputs(figure_data: pd.DataFrame, figure: plt.Figure) -> list[Path]:
     OUTPUTS_FIGURES_DIR.mkdir(parents=True, exist_ok=True)
-    MANUSCRIPT_FIGURES_DIR.mkdir(parents=True, exist_ok=True)
+    PUBLIC_FIGURES_DIR.mkdir(parents=True, exist_ok=True)
 
     data_path = OUTPUTS_TABLES_DIR / "main_utility_linkability_tradeoff_figure_data.csv"
     figure_data.to_csv(data_path, index=False)
 
     output_paths = [
         OUTPUTS_FIGURES_DIR / "main_utility_linkability_tradeoff_clean.png",
-        OUTPUTS_FIGURES_DIR / "main_utility_linkability_tradeoff_clean.pdf",
-        MANUSCRIPT_FIGURES_DIR / "main_utility_linkability_tradeoff.png",
-        MANUSCRIPT_FIGURES_DIR / "main_utility_linkability_tradeoff.pdf",
+        PUBLIC_FIGURES_DIR / "main_utility_linkability_tradeoff.png",
     ]
     for path in output_paths:
         save_options = {"bbox_inches": "tight", "pad_inches": 0.02}

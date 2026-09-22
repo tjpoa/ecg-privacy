@@ -3,7 +3,6 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 SRC_DIR = PROJECT_ROOT / "src"
-NOTEBOOKS_DIR = PROJECT_ROOT / "notebooks"
 OUTPUTS_DIR = PROJECT_ROOT / "outputs"
 OUTPUTS_TABLES_DIR = OUTPUTS_DIR / "tables"
 OUTPUTS_FIGURES_DIR = OUTPUTS_DIR / "figures"
@@ -17,7 +16,6 @@ DATA_METADATA = DATA_DIR / "metadata"
 DATA_PROCESSED = DATA_DIR / "processed"
 
 SEGMENT_FEATURES_DATASET_DIR = DATA_INTERIM / "segment_features_dataset"
-WINDOW_OVERLAP_SWEEP_DIR = DATA_INTERIM / "window_overlap_sweep"
 FINAL_SEGMENT_FEATURES_DIR = DATA_PROCESSED / "final_segment_features_dataset"
 FEATURE_SETS_DIR = DATA_PROCESSED / "feature_sets"
 

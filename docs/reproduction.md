@@ -65,9 +65,9 @@ python src\export_absolute_attribute_risk.py
 ```powershell
 python scripts\verify_public_release.py --require-license
 python -m unittest discover -s tests -v
-python scripts\sync_manuscript_source.py --check
+python -m compileall -q src scripts tests
 ```
 
-Generated data, predictions, models, and figures remain under ignored local
-directories. The release checklist defines which small protocol and result
-files may be archived separately with a version tag or Zenodo deposit.
+Generated data, predictions, models, and per-record files remain under ignored
+local directories. The public repository includes only the final PNG figures
+and aggregate tables needed to interpret and reproduce the article workflow.

@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import argparse
 import csv
-import json
 import re
 import subprocess
 import sys
@@ -25,18 +24,20 @@ FORBIDDEN_PREFIXES = (
     "tmp/",
     "venv/",
     ".venv/",
+    "manuscript/",
+    "notebooks/",
 )
 REQUIRED_FILES = (
     "README.md",
     ".gitignore",
     "requirements.txt",
-    "requirements-notebooks.txt",
     "THIRD_PARTY_NOTICES.md",
     "configs/experiment_config.yaml",
     "data/README.md",
     "docs/final_protocol.md",
     "docs/reproduction.md",
-    "docs/release_manifest.md",
+    "figures/README.md",
+    "figures/main_utility_linkability_tradeoff.png",
     "reproducibility/README.md",
     "reproducibility/tables/main_utility_linkability_tradeoff_figure_data.csv",
     "reproducibility/tables/main_paired_uncertainty_summary.csv",
@@ -59,6 +60,7 @@ FORBIDDEN_DATA_SUFFIXES = {
     ".pth",
     ".onnx",
 }
+FORBIDDEN_PUBLIC_SUFFIXES = {".tex", ".bib", ".bst", ".cls", ".pdf"}
 MAX_CANDIDATE_BYTES = 25 * 1024 * 1024
 LOCAL_TABLES_TO_VALIDATE = (
     "outputs/tables/article_canonical_representation_table.csv",
@@ -128,6 +130,8 @@ def main() -> int:
     for line in status_lines:
         if len(line) < 4:
             continue
+        if "D" in line[:2]:
+            continue
         status_path = line[3:]
         if " -> " in status_path:
             status_path = status_path.split(" -> ", 1)[1]
@@ -156,24 +160,14 @@ def main() -> int:
         if file_path.suffix.lower() in FORBIDDEN_DATA_SUFFIXES:
             errors.append(f"forbidden data or model file: {path}")
 
+        if file_path.suffix.lower() in FORBIDDEN_PUBLIC_SUFFIXES:
+            errors.append(f"forbidden manuscript or PDF artefact: {path}")
+
         if file_path.stat().st_size > MAX_CANDIDATE_BYTES:
             errors.append(f"candidate file exceeds 25 MiB: {path}")
 
         if file_path.suffix.lower() == ".csv":
             validate_csv_width(file_path, errors)
-
-        if file_path.suffix.lower() == ".ipynb":
-            try:
-                notebook = json.loads(file_path.read_text(encoding="utf-8"))
-            except (json.JSONDecodeError, OSError) as exc:
-                errors.append(f"could not parse notebook {path}: {exc}")
-            else:
-                for cell in notebook.get("cells", []):
-                    if cell.get("cell_type") != "code":
-                        continue
-                    if cell.get("outputs") or cell.get("execution_count") is not None:
-                        errors.append(f"notebook contains execution output: {path}")
-                        break
 
         try:
             content = file_path.read_text(encoding="utf-8")

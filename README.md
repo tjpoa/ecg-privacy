@@ -51,12 +51,6 @@ python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 ```
 
-For notebook execution, also install:
-
-```powershell
-python -m pip install -r requirements-notebooks.txt
-```
-
 ## Quick checks
 
 Run the release audit and unit tests during preparation:
@@ -73,8 +67,8 @@ python scripts\verify_public_release.py --require-license
 ```
 
 The release audit checks for raw data, temporary directories, local absolute
-paths, notebook outputs, common secret patterns, inconsistent CSV rows, and
-the minimum documentation files required for reuse.
+paths, manuscript and PDF artefacts, common secret patterns, inconsistent CSV
+rows, and the minimum documentation files required for reuse.
 
 ## Reproducing the pipeline
 
@@ -87,18 +81,6 @@ python src\build_segment_features_dataset.py --record-limit 1000 --batch-size 25
 
 The full command sequence and expected artefacts are documented in
 [`docs/reproduction.md`](docs/reproduction.md).
-
-The recommended notebook order is:
-
-1. `notebooks/01_data_understanding.ipynb`
-2. `notebooks/02_data_preparation.ipynb`
-3. `notebooks/03_modeling_and_tradeoff.ipynb`
-4. `notebooks/04_privacy_analysis.ipynb`
-5. `notebooks/05_results_summary.ipynb`
-
-The command-line experiments used for the final analysis are documented in
-`notebooks/README.md`. They can be computationally expensive and write their
-artefacts under `outputs/`, which is excluded from Git.
 
 The two attack extensions can be reproduced with the final encoder protocol:
 
@@ -117,8 +99,8 @@ from the public repository.
 ```text
 configs/       experiment configuration
 data/          local data instructions and ignored data directories
-manuscript/    manuscript source and submission declarations
-notebooks/     recommended workflow notebooks
+docs/          final protocol and reproduction instructions
+figures/       reproducible public PNG figures
 reproducibility/ aggregate tables supporting the manuscript
 scripts/       release checks and small utility runners
 src/           reusable preprocessing, modelling, and privacy code
@@ -147,16 +129,15 @@ dataset's access, citation, and licensing terms. The recordings, headers,
 patient-level data, and derived per-record files are not redistributed in this
 repository.
 
-The author-owned source code, experiment configurations, documentation, and
-tests are available under the [MIT License](LICENSE). Aggregate result tables
-supporting the article are included in the public repository at the exact
-version used for the current manuscript:
-
-<https://github.com/tjpoa/ecg-privacy/tree/590e7a0>
+The author-owned source code, experiment configurations, documentation, tests,
+public figures, and aggregate result tables are available at
+<https://github.com/tjpoa/ecg-privacy>. The code is released under the
+[MIT License](LICENSE).
 
 Full reproduction instructions are provided in
-[`docs/reproduction.md`](docs/reproduction.md). A future tagged release or
-Zenodo DOI should replace the commit URL in the manuscript once created.
+[`docs/reproduction.md`](docs/reproduction.md). Before submission, the
+manuscript should cite a tagged release or Zenodo DOI for the exact code
+version used.
 
 ## Licence
 

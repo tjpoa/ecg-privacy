@@ -10,9 +10,12 @@ import numpy as np
 import pandas as pd
 
 try:
-    from config import OUTPUTS_FIGURES_DIR, OUTPUTS_TABLES_DIR
+    from config import OUTPUTS_FIGURES_DIR, OUTPUTS_TABLES_DIR, PROJECT_ROOT
 except ImportError:  # pragma: no cover - package import fallback
-    from .config import OUTPUTS_FIGURES_DIR, OUTPUTS_TABLES_DIR
+    from .config import OUTPUTS_FIGURES_DIR, OUTPUTS_TABLES_DIR, PROJECT_ROOT
+
+
+PUBLIC_FIGURES_DIR = PROJECT_ROOT / "figures"
 
 
 def _label_representation(method: str, dimension: int | float | None) -> str:
@@ -275,6 +278,7 @@ def build_thesis_ready_table(broad_df: pd.DataFrame, multiseed_df: pd.DataFrame)
 
 def save_broad_pairwise_figure(broad_df: pd.DataFrame) -> Path:
     OUTPUTS_FIGURES_DIR.mkdir(parents=True, exist_ok=True)
+    PUBLIC_FIGURES_DIR.mkdir(parents=True, exist_ok=True)
     fig, ax = plt.subplots(figsize=(8.2, 5.5))
     families = [
         "identity",
@@ -342,13 +346,14 @@ def save_broad_pairwise_figure(broad_df: pd.DataFrame) -> Path:
     ax.grid(alpha=0.25)
     ax.legend(fontsize=8)
     fig.tight_layout()
-    out = OUTPUTS_FIGURES_DIR / "final_representation_pairwise_tradeoff_multiseed.png"
+    out = PUBLIC_FIGURES_DIR / "ecg_final_representation_pairwise_tradeoff_multiseed.png"
     fig.savefig(out, dpi=200, bbox_inches="tight")
     return out
 
 
 def save_multiseed_operational_figure(multiseed_df: pd.DataFrame) -> Path:
     OUTPUTS_FIGURES_DIR.mkdir(parents=True, exist_ok=True)
+    PUBLIC_FIGURES_DIR.mkdir(parents=True, exist_ok=True)
     plot_df = multiseed_df.copy()
     order = [
         "Encoder dim8",
@@ -393,7 +398,7 @@ def save_multiseed_operational_figure(multiseed_df: pd.DataFrame) -> Path:
     axes[1].tick_params(axis="x", rotation=25)
     axes[1].grid(axis="y", alpha=0.25)
     fig.tight_layout()
-    out = OUTPUTS_FIGURES_DIR / "final_encoder_dp_operational_multiseed.png"
+    out = PUBLIC_FIGURES_DIR / "ecg_final_encoder_dp_operational_multiseed.png"
     fig.savefig(out, dpi=200, bbox_inches="tight")
     return out
 
