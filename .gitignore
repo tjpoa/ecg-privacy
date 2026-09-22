@@ -4,9 +4,6 @@ __pycache__/
 *.pyo
 *.pyd
 
-# Jupyter
-.ipynb_checkpoints/
-
 # Virtual environments
 .env
 .venv
@@ -33,21 +30,17 @@ data/processed/
 *.secret
 *.secrets
 
-# Generated results, fitted models, logs, and internal manuscript handoff
+# Generated results, fitted models, and logs
 outputs/
 output/
 tmp/
-manuscript/overleaf_jbhi_submission.zip
-manuscript/overleaf_jbhi_submission/*.aux
-manuscript/overleaf_jbhi_submission/*.bbl
-manuscript/overleaf_jbhi_submission/*.blg
-manuscript/overleaf_jbhi_submission/*.fdb_latexmk
-manuscript/overleaf_jbhi_submission/*.fls
-manuscript/overleaf_jbhi_submission/*.log
-manuscript/overleaf_jbhi_submission/*.out
-manuscript/overleaf_jbhi_submission/*.synctex.gz
-manuscript/overleaf_jbhi_submission/*.xdv
 
-# Exploratory/archive material that is not part of the public workflow
-notebooks/archive/
+# The manuscript and exploratory notebooks are maintained outside this public
+# code repository.
+manuscript/
+notebooks/
 templates/
+
+# Public figures are PNG files. Keep vector/PDF submission assets outside this
+# repository.
+figures/*.pdf

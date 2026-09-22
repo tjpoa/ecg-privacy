@@ -14,9 +14,7 @@ except ImportError:  # pragma: no cover - package import fallback
     from .config import OUTPUTS_FIGURES_DIR, PROJECT_ROOT
 
 
-MANUSCRIPT_FIGURES_DIR = (
-    PROJECT_ROOT / "manuscript" / "overleaf_jbhi_submission" / "figures"
-)
+PUBLIC_FIGURES_DIR = PROJECT_ROOT / "figures"
 
 
 def _rounded_box(
@@ -86,8 +84,6 @@ def build_figure() -> plt.Figure:
             "font.family": "serif",
             "font.serif": ["Times New Roman", "Times", "DejaVu Serif"],
             "font.size": 8.0,
-            "pdf.fonttype": 42,
-            "ps.fonttype": 42,
         }
     )
 
@@ -209,12 +205,10 @@ def build_figure() -> plt.Figure:
 
 def save_outputs(figure: plt.Figure) -> list[Path]:
     OUTPUTS_FIGURES_DIR.mkdir(parents=True, exist_ok=True)
-    MANUSCRIPT_FIGURES_DIR.mkdir(parents=True, exist_ok=True)
+    PUBLIC_FIGURES_DIR.mkdir(parents=True, exist_ok=True)
     paths = [
         OUTPUTS_FIGURES_DIR / "threat_model_attack_axes_clean.png",
-        OUTPUTS_FIGURES_DIR / "threat_model_attack_axes_clean.pdf",
-        MANUSCRIPT_FIGURES_DIR / "threat_model_attack_axes.png",
-        MANUSCRIPT_FIGURES_DIR / "threat_model_attack_axes.pdf",
+        PUBLIC_FIGURES_DIR / "threat_model_attack_axes.png",
     ]
     for path in paths:
         options: dict[str, float | str] = {
