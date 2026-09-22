@@ -141,14 +141,22 @@ tests/         lightweight regression tests
 
 ## Code and data availability
 
-The intended code repository is:
+The source ECG recordings are available from the [PhysioNet ECG Arrhythmia
+Database](https://physionet.org/content/ecg-arrhythmia/1.0.0/), subject to the
+dataset's access, citation, and licensing terms. The recordings, headers,
+patient-level data, and derived per-record files are not redistributed in this
+repository.
 
-<https://github.com/tjpoa/ecg-privacy>
+The author-owned source code, experiment configurations, documentation, and
+tests are available under the [MIT License](LICENSE). Aggregate result tables
+supporting the article are included in the public repository at the exact
+version used for the current manuscript:
 
-The ECG source data are available from PhysioNet and are not redistributed in
-this repository. Before submission or publication, the repository should be
-tagged with the exact code version used for the final manuscript and the
-manuscript's availability statement should reference that tag or a Zenodo DOI.
+<https://github.com/tjpoa/ecg-privacy/tree/590e7a0>
+
+Full reproduction instructions are provided in
+[`docs/reproduction.md`](docs/reproduction.md). A future tagged release or
+Zenodo DOI should replace the commit URL in the manuscript once created.
 
 ## Licence
 
