@@ -15,6 +15,7 @@ from sklearn.metrics import (
     roc_auc_score,
 )
 from sklearn.model_selection import GroupShuffleSplit
+from sklearn.neighbors import NearestNeighbors
 from sklearn.pipeline import Pipeline
 from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import LabelEncoder, StandardScaler
@@ -73,11 +74,22 @@ def get_feature_columns(features_df, exclude_columns=None):
     return [col for col in features_df.columns if col not in exclude]
 
 
+def assert_disjoint_group_frames(train_df, test_df, group_col="patient_id", context="split"):
+    """Fail loudly if a retained record identifier crosses train and test."""
+    train_groups = set(train_df[group_col].tolist())
+    test_groups = set(test_df[group_col].tolist())
+    overlap = train_groups.intersection(test_groups)
+    if overlap:
+        sample = sorted(str(value) for value in overlap)[:5]
+        raise AssertionError(f"{context}: train/test group overlap detected: {sample}")
+
+
 def split_segments_by_patient(features_df, group_col="patient_id", test_size=0.2, random_state=42):
     splitter = GroupShuffleSplit(n_splits=1, test_size=test_size, random_state=random_state)
     train_idx, test_idx = next(splitter.split(features_df, groups=features_df[group_col]))
     train_df = features_df.iloc[train_idx].reset_index(drop=True)
     test_df = features_df.iloc[test_idx].reset_index(drop=True)
+    assert_disjoint_group_frames(train_df, test_df, group_col=group_col, context="group holdout")
     return train_df, test_df
 
 
@@ -109,6 +121,7 @@ def split_segments_by_patient_stratified(
 
     train_df = features_df[features_df[group_col].isin(train_patient_ids)].reset_index(drop=True)
     test_df = features_df[features_df[group_col].isin(test_patient_ids)].reset_index(drop=True)
+    assert_disjoint_group_frames(train_df, test_df, group_col=group_col, context="stratified group holdout")
     return train_df, test_df
 
 
@@ -133,6 +146,9 @@ def split_train_val_test_by_patient(
     relative_val_size = val_size / (1.0 - test_size)
     split_kwargs.update({"test_size": relative_val_size, "random_state": random_state + 1})
     train_df, val_df = split_fn(train_val_df, **split_kwargs)
+    assert_disjoint_group_frames(train_df, val_df, group_col=group_col, context="train/validation split")
+    assert_disjoint_group_frames(train_df, test_df, group_col=group_col, context="train/test split")
+    assert_disjoint_group_frames(val_df, test_df, group_col=group_col, context="validation/test split")
     return train_df, val_df, test_df
 
 
@@ -468,6 +484,7 @@ def evaluate_utility_model_on_split(
 
     if model_name == "LogisticRegression":
         model = _build_logistic_pipeline(feature_columns)
+        X_test_evaluated = X_test
         evaluation = evaluate_binary_classifier(
             model,
             X_train,
@@ -480,6 +497,7 @@ def evaluate_utility_model_on_split(
         )
     elif model_name == "RandomForest":
         model = _build_random_forest_model()
+        X_test_evaluated = X_test_imputed
         evaluation = evaluate_binary_classifier(
             model,
             X_train_imputed,
@@ -492,6 +510,7 @@ def evaluate_utility_model_on_split(
         )
     elif model_name == "GradientBoosting":
         model = _build_gradient_boosting_model()
+        X_test_evaluated = X_test_imputed
         evaluation = evaluate_binary_classifier(
             model,
             X_train_imputed,
@@ -504,6 +523,7 @@ def evaluate_utility_model_on_split(
         )
     elif model_name == "XGBoost":
         model = _build_xgb_model()
+        X_test_evaluated = X_test_imputed
         evaluation = evaluate_binary_classifier(
             model,
             X_train_imputed,
@@ -519,10 +539,23 @@ def evaluate_utility_model_on_split(
             "model_name must be 'LogisticRegression', 'RandomForest', 'GradientBoosting', or 'XGBoost'."
         )
 
+    y_pred = model.predict(X_test_evaluated)
+    y_score = get_positive_class_scores(model, X_test_evaluated, positive_label=positive_label)
+    prediction_columns = [
+        col
+        for col in ("patient_id", "record_id", "segment_id", "segment_ref", target_col)
+        if col in test_df.columns
+    ]
+    predictions_df = test_df[prediction_columns].reset_index(drop=True).copy()
+    predictions_df["y_true"] = y_test
+    predictions_df["y_pred"] = y_pred
+    predictions_df["y_score"] = y_score
+
     return {
         "model_name": model_name,
         "feature_columns": feature_columns,
         "evaluation": evaluation,
+        "predictions_df": predictions_df,
     }
 
 
@@ -926,7 +959,7 @@ def generate_positive_pairs(
     return positive_pairs
 
 
-def generate_negative_pairs(segment_df, n_pairs, random_state=42, max_attempts_factor=20):
+def _generate_random_negative_pairs(segment_df, n_pairs, random_state=42, max_attempts_factor=20):
     rng = np.random.default_rng(random_state)
     negative_pairs = []
     patient_ids = segment_df["patient_id"].to_numpy()
@@ -949,7 +982,127 @@ def generate_negative_pairs(segment_df, n_pairs, random_state=42, max_attempts_f
         pair_set.add(pair)
         negative_pairs.append(pair)
 
-    return negative_pairs
+    return negative_pairs, pair_set
+
+
+def _generate_hard_negative_pairs(
+    segment_df,
+    n_pairs,
+    feature_columns,
+    random_state=42,
+    hard_negative_pool_size=5,
+):
+    rng = np.random.default_rng(random_state)
+    patient_feature_df = segment_df.groupby("patient_id")[feature_columns].mean()
+
+    if len(patient_feature_df) < 2:
+        return [], set()
+
+    imputer = SimpleImputer(strategy="median")
+    scaler = StandardScaler()
+    patient_matrix = imputer.fit_transform(patient_feature_df)
+    patient_matrix = scaler.fit_transform(patient_matrix)
+
+    n_neighbors = min(len(patient_feature_df), max(2, hard_negative_pool_size + 1))
+    nn = NearestNeighbors(n_neighbors=n_neighbors, metric="euclidean")
+    nn.fit(patient_matrix)
+    neighbor_indices = nn.kneighbors(return_distance=False)
+
+    patient_ids = patient_feature_df.index.to_list()
+    patient_to_segment_indices = {
+        patient_id: segment_df.index[segment_df["patient_id"] == patient_id].to_numpy()
+        for patient_id in patient_ids
+    }
+
+    candidate_patient_pairs = []
+    seen_patient_pairs = set()
+    for row_idx, patient_id in enumerate(patient_ids):
+        for neighbor_idx in neighbor_indices[row_idx][1:]:
+            other_patient_id = patient_ids[int(neighbor_idx)]
+            patient_pair = tuple(sorted((patient_id, other_patient_id)))
+            if patient_pair in seen_patient_pairs:
+                continue
+            seen_patient_pairs.add(patient_pair)
+            candidate_patient_pairs.append(patient_pair)
+
+    rng.shuffle(candidate_patient_pairs)
+
+    negative_pairs = []
+    pair_set = set()
+    candidate_idx = 0
+    max_attempts = max(n_pairs * 20, 1000)
+    attempts = 0
+
+    while len(negative_pairs) < n_pairs and candidate_patient_pairs and attempts < max_attempts:
+        patient_a, patient_b = candidate_patient_pairs[candidate_idx % len(candidate_patient_pairs)]
+        candidate_idx += 1
+        attempts += 1
+
+        indices_a = patient_to_segment_indices[patient_a]
+        indices_b = patient_to_segment_indices[patient_b]
+        idx_a = int(rng.choice(indices_a))
+        idx_b = int(rng.choice(indices_b))
+        pair = tuple(sorted((idx_a, idx_b)))
+
+        if pair in pair_set:
+            continue
+
+        pair_set.add(pair)
+        negative_pairs.append(pair)
+
+    return negative_pairs, pair_set
+
+
+def generate_negative_pairs(
+    segment_df,
+    n_pairs,
+    random_state=42,
+    max_attempts_factor=20,
+    strategy="random",
+    feature_columns=None,
+    hard_negative_pool_size=5,
+):
+    if strategy == "random":
+        negative_pairs, _ = _generate_random_negative_pairs(
+            segment_df,
+            n_pairs=n_pairs,
+            random_state=random_state,
+            max_attempts_factor=max_attempts_factor,
+        )
+        return negative_pairs
+
+    if strategy == "hard":
+        if feature_columns is None:
+            raise ValueError("feature_columns must be provided when strategy='hard'.")
+
+        hard_pairs, hard_pair_set = _generate_hard_negative_pairs(
+            segment_df,
+            n_pairs=n_pairs,
+            feature_columns=feature_columns,
+            random_state=random_state,
+            hard_negative_pool_size=hard_negative_pool_size,
+        )
+
+        if len(hard_pairs) >= n_pairs:
+            return hard_pairs[:n_pairs]
+
+        random_pairs, _ = _generate_random_negative_pairs(
+            segment_df,
+            n_pairs=n_pairs - len(hard_pairs),
+            random_state=random_state + 101,
+            max_attempts_factor=max_attempts_factor,
+        )
+        combined = list(hard_pairs)
+        for pair in random_pairs:
+            if pair in hard_pair_set:
+                continue
+            hard_pair_set.add(pair)
+            combined.append(pair)
+            if len(combined) >= n_pairs:
+                break
+        return combined
+
+    raise ValueError("strategy must be 'random' or 'hard'.")
 
 
 def build_pair_table(
@@ -958,8 +1111,11 @@ def build_pair_table(
     random_state=42,
     min_segment_gap=0,
     max_pairs_per_patient=None,
+    negative_strategy="random",
+    hard_negative_pool_size=5,
 ):
     segment_df = segment_df.reset_index(drop=True)
+    feature_columns = get_feature_columns(segment_df)
     positive_pairs = generate_positive_pairs(
         segment_df,
         max_pairs=max_pairs,
@@ -971,6 +1127,9 @@ def build_pair_table(
         segment_df,
         n_pairs=len(positive_pairs),
         random_state=random_state,
+        strategy=negative_strategy,
+        feature_columns=feature_columns,
+        hard_negative_pool_size=hard_negative_pool_size,
     )
 
     rows = []
@@ -1073,6 +1232,8 @@ def run_linkability_baselines(
     representation="absdiff",
     min_segment_gap=0,
     max_positive_pairs_per_patient=None,
+    negative_strategy="random",
+    hard_negative_pool_size=5,
     include_distance_baselines=False,
 ):
     train_df, test_df = split_segments_by_patient(
@@ -1089,6 +1250,8 @@ def run_linkability_baselines(
         random_state=random_state,
         min_segment_gap=min_segment_gap,
         max_pairs_per_patient=max_positive_pairs_per_patient,
+        negative_strategy=negative_strategy,
+        hard_negative_pool_size=hard_negative_pool_size,
     )
     test_pair_df = build_pair_table(
         test_df,
@@ -1096,6 +1259,8 @@ def run_linkability_baselines(
         random_state=random_state + 1,
         min_segment_gap=min_segment_gap,
         max_pairs_per_patient=max_positive_pairs_per_patient,
+        negative_strategy=negative_strategy,
+        hard_negative_pool_size=hard_negative_pool_size,
     )
 
     X_train, y_train = build_pair_features(train_df, train_pair_df, feature_columns, representation=representation)
@@ -1185,6 +1350,8 @@ def run_linkability_baselines_on_split(
     random_state=42,
     min_segment_gap=0,
     max_positive_pairs_per_patient=None,
+    negative_strategy="random",
+    hard_negative_pool_size=5,
     include_distance_baselines=False,
 ):
     feature_columns = get_feature_columns(train_df)
@@ -1194,6 +1361,8 @@ def run_linkability_baselines_on_split(
         random_state=random_state,
         min_segment_gap=min_segment_gap,
         max_pairs_per_patient=max_positive_pairs_per_patient,
+        negative_strategy=negative_strategy,
+        hard_negative_pool_size=hard_negative_pool_size,
     )
     test_pair_df = build_pair_table(
         test_df,
@@ -1201,6 +1370,8 @@ def run_linkability_baselines_on_split(
         random_state=random_state + 1,
         min_segment_gap=min_segment_gap,
         max_pairs_per_patient=max_positive_pairs_per_patient,
+        negative_strategy=negative_strategy,
+        hard_negative_pool_size=hard_negative_pool_size,
     )
 
     X_train, y_train = build_pair_features(train_df, train_pair_df, feature_columns, representation=representation)
@@ -1292,6 +1463,8 @@ def fit_linkability_model(
     representation="absdiff",
     min_segment_gap=0,
     max_positive_pairs_per_patient=None,
+    negative_strategy="random",
+    hard_negative_pool_size=5,
 ):
     train_df, test_df = split_segments_by_patient(
         features_df,
@@ -1306,6 +1479,8 @@ def fit_linkability_model(
         random_state=random_state,
         min_segment_gap=min_segment_gap,
         max_pairs_per_patient=max_positive_pairs_per_patient,
+        negative_strategy=negative_strategy,
+        hard_negative_pool_size=hard_negative_pool_size,
     )
     test_pair_df = build_pair_table(
         test_df,
@@ -1313,6 +1488,8 @@ def fit_linkability_model(
         random_state=random_state + 1,
         min_segment_gap=min_segment_gap,
         max_pairs_per_patient=max_positive_pairs_per_patient,
+        negative_strategy=negative_strategy,
+        hard_negative_pool_size=hard_negative_pool_size,
     )
     X_train, y_train = build_pair_features(train_df, train_pair_df, feature_columns, representation=representation)
     X_test, y_test = build_pair_features(test_df, test_pair_df, feature_columns, representation=representation)
@@ -1357,6 +1534,8 @@ def run_repeated_linkability_baselines(
     representation="absdiff",
     min_segment_gap=0,
     max_positive_pairs_per_patient=None,
+    negative_strategy="random",
+    hard_negative_pool_size=5,
     include_distance_baselines=False,
 ):
     detailed_results = []
@@ -1371,6 +1550,8 @@ def run_repeated_linkability_baselines(
             representation=representation,
             min_segment_gap=min_segment_gap,
             max_positive_pairs_per_patient=max_positive_pairs_per_patient,
+            negative_strategy=negative_strategy,
+            hard_negative_pool_size=hard_negative_pool_size,
             include_distance_baselines=include_distance_baselines,
         )
         seed_df = run_output["summary_df"].copy()
@@ -1481,6 +1662,8 @@ def compute_linkability_feature_importance(
     representation="absdiff",
     min_segment_gap=0,
     max_positive_pairs_per_patient=None,
+    negative_strategy="random",
+    hard_negative_pool_size=5,
     permutation_scoring="roc_auc",
 ):
     fitted = fit_linkability_model(
@@ -1492,6 +1675,8 @@ def compute_linkability_feature_importance(
         representation=representation,
         min_segment_gap=min_segment_gap,
         max_positive_pairs_per_patient=max_positive_pairs_per_patient,
+        negative_strategy=negative_strategy,
+        hard_negative_pool_size=hard_negative_pool_size,
     )
     model = fitted["model"]
     X_test = fitted["X_test"]

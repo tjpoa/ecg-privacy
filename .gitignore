@@ -18,19 +18,36 @@ poetry.lock
 # OS
 .DS_Store
 
-# Data files
+# Data files: the PhysioNet records and all derived patient-level datasets
+# remain local and are never committed to this repository.
 data/raw/
 data/interim/
 data/processed/
+*.mat
+*.hea
 
-# Models
-outputs/models/
+# Local configuration and secrets
+.env
+.env.*
+*.local
+*.secret
+*.secrets
 
-# Logs
-outputs/logs/
+# Generated results, fitted models, logs, and internal manuscript handoff
+outputs/
+output/
+tmp/
+manuscript/overleaf_jbhi_submission.zip
+manuscript/overleaf_jbhi_submission/*.aux
+manuscript/overleaf_jbhi_submission/*.bbl
+manuscript/overleaf_jbhi_submission/*.blg
+manuscript/overleaf_jbhi_submission/*.fdb_latexmk
+manuscript/overleaf_jbhi_submission/*.fls
+manuscript/overleaf_jbhi_submission/*.log
+manuscript/overleaf_jbhi_submission/*.out
+manuscript/overleaf_jbhi_submission/*.synctex.gz
+manuscript/overleaf_jbhi_submission/*.xdv
 
-# Figures generated
-outputs/figures/
-
-# Tables generated
-outputs/tables/
+# Exploratory/archive material that is not part of the public workflow
+notebooks/archive/
+templates/
